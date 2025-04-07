@@ -93,7 +93,10 @@ public final class TransactionImpl implements Transaction {
 
                                     return CompletableFuture.failedFuture(new TransactionException("Transaction failed after" + settings.getRetryAttempts() + "attempt(s)", e));
                                 })
-                ).thenCompose(v -> v);
+                ).thenCompose(v -> v)
+                .whenComplete((result, error) -> {
+                    semaphore.release();  // Release in both success and failure cases
+                });
     }
 
     private <T, U> CompletionStage<U> executeTransaction(
