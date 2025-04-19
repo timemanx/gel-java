@@ -1,6 +1,7 @@
 package com.geldata.driver.clients;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.util.ReferenceCounted;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.joou.UShort;
@@ -183,7 +184,10 @@ public abstract class GelBinaryClient extends BaseGelClient {
                 Cardinality.MANY,
                 IOFormat.NONE,
                 false
-        )).thenApply(r -> null);
+        )).thenApply((r) -> {
+            r.data.forEach(ReferenceCounted::release);
+            return null;
+        });
     }
 
     @Override
@@ -241,7 +245,7 @@ public abstract class GelBinaryClient extends BaseGelClient {
                 IOFormat.BINARY,
                 TypeBuilder.requiredImplicitTypeNames(cls)
         )).thenApply(result -> {
-            if(result.data.size() == 0) {
+            if(result.data.isEmpty()) {
                 return null;
             }
 
@@ -338,7 +342,7 @@ public abstract class GelBinaryClient extends BaseGelClient {
                 );
             }
 
-            if(result.data.size() == 0) {
+            if(result.data.isEmpty()) {
                 return new Json("[]");
             }
 
