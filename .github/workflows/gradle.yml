@@ -23,10 +23,10 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: true
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         with:
           path: ~/.gradle/caches
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle') }}
@@ -36,32 +36,22 @@ jobs:
         uses: edgedb/setup-edgedb@8bc9e10005674ec772652b86e1fdd476e6462284
         with:
           server-version: 'stable'
-      - name: Set up JDK 11
-        uses: actions/setup-java@v3
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
         with:
-          java-version: '11'
+          java-version: '21'
           distribution: 'temurin'
       - name: Build with Gradle
         run: ./gradlew build --info
   release:
     name: Publish artifacts
     runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'pull_request' && ( (vars.runReleaseOnPush || 'true') == 'true' || contains(github.event.head_commit.message, '[release]') ) }}
     needs: build
-    env:
-        HAS_CREDENTIALS: ${{ secrets.signingKey != '' && secrets.signingPassword != '' && secrets.SONATYPE_USERNAME_GEL != '' && secrets.SONATYPE_PASSWORD_GEL != '' }}
     steps:
-      - name: Validate repository secrets for publish
-        if: ${{ env.HAS_CREDENTIALS != 'true' }}
-        run: |
-            echo '### Release Failed ❌' >> $GITHUB_STEP_SUMMARY
-            echo 'This repository does not have all required secrets: signingKey, signingPassword, SONATYPE_USERNAME_GEL or SONATYPE_PASSWORD_GEL).' >> $GITHUB_STEP_SUMMARY
-            echo "::error::This repository does not have all required secrets: signingKey, signingPassword, SONATYPE_USERNAME_GEL or SONATYPE_PASSWORD_GEL)."
-            exit -1
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         with:
           path: ~/.gradle/caches
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle') }}
@@ -70,7 +60,7 @@ jobs:
       - name: Set up JDK
         uses: actions/setup-java@v3
         with:
-          java-version: '11'
+          java-version: '21'
           distribution: 'temurin'
       - name: Publish with Gradle
         run: ./gradlew -x test publish

@@ -112,23 +112,15 @@ subprojects {
 
     publishing {
         repositories {
-                maven {
-                    if (isRelease) {
-                        url 'https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/'
-                    } else {
-                        url 'https://s01.oss.sonatype.org/content/repositories/snapshots/'
-                    }
-
-                    def sonatypeUsername = findProperty('sonatypeUsername')
-                    def sonatypePassword = findProperty('sonatypePassword')
-                    if (sonatypeUsername != null && sonatypePassword != null) {
-                        credentials {
-                            username sonatypeUsername
-                            password sonatypePassword
-                        }
-                    }
+            maven {
+                name = "GitHubPackages"
+                url = uri("https://maven.pkg.github.com/timemanx/gel-java")
+                credentials {
+                    username = project.findProperty("gpr.user")?.toString() ?: System.getenv("USERNAME")
+                    password = project.findProperty("gpr.key")?.toString() ?: System.getenv("GITHUB_TOKEN")
                 }
             }
+        }
     }
 }
 
