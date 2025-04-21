@@ -47,7 +47,7 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
       - name: Publish with Gradle
-        run: ./gradlew -x publish
+        run: ./gradlew -x test publish
         env:
           ORG_GRADLE_PROJECT_signingKey: ${{ secrets.signingKey }}
           ORG_GRADLE_PROJECT_signingPassword: ${{ secrets.signingPassword }}
