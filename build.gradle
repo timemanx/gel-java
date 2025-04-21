@@ -11,7 +11,7 @@ ext {
     artifact_group = 'com.geldata'
     project_description = 'Java binding for Gel'
     project_url = "https://geldata.com"
-    project_jdk = '11'
+    project_jdk = '21'
     jdk = JavaVersion.current().majorVersion
     jdk_javadoc = "https://docs.oracle.com/javase/$jdk/docs/api/".toString()
     if (JavaVersion.current().isJava11Compatible()) {
