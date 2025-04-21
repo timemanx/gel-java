@@ -1,21 +1,6 @@
 name: Java CI
 
-on:
-  push:
-    paths:
-      - '**.gradle'
-      - '**.properties'
-      - '**/src/**'
-      - '.github/workflows/**'
-    branches:
-      - 'master'
-  pull_request:
-    paths:
-      - '**.gradle'
-      - '**.properties'
-      - '**/src/**'
-      - '.github/workflows/**'
-    types: [opened, synchronize, reopened]
+on: workflow_dispatch
 
 jobs:
   build:
