@@ -63,7 +63,7 @@ public class GelTcpClient extends GelBinaryClient implements TransactableClient 
                         var pipeline = ch.pipeline();
 
                         SslContext context = new SslContext() {
-                            SslContext innerContext = SslUtils.applyTrustManager(
+                            final SslContext innerContext = SslUtils.applyTrustManager(
                                 getConnectionArguments(), 
                                 SslContextBuilder.forClient()
                                     .protocols("TLSv1.3")
