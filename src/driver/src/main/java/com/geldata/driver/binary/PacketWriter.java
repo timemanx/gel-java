@@ -91,10 +91,13 @@ public class PacketWriter implements AutoCloseable {
                     : (buffer.capacity() << 1) + target;
 
         var newBuffer = ByteBufAllocator.DEFAULT.directBuffer(newSize);
+        var oldBuffer = this.buffer;
 
-        var position = this.buffer.writerIndex();
+        var position = oldBuffer.writerIndex();
 
-        newBuffer.writeBytes(this.buffer);
+        newBuffer.writeBytes(oldBuffer);
+
+        oldBuffer.release();
 
         this.buffer = newBuffer;
 

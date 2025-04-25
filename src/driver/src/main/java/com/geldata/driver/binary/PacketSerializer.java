@@ -4,6 +4,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.MessageToMessageDecoder;
 import io.netty.handler.codec.MessageToMessageEncoder;
 import org.jetbrains.annotations.NotNull;
@@ -177,12 +178,13 @@ public class PacketSerializer {
 
     public static @NotNull MessageToMessageEncoder<Sendable> createEncoder() {
         return new MessageToMessageEncoder<>() {
+            private ByteBuf data;
 
             @Override
             protected void encode(@NotNull ChannelHandlerContext ctx, @NotNull Sendable msg, @NotNull List<Object> out) {
 
                 try {
-                    var data = PacketSerializer.serialize(msg);
+                    data = PacketSerializer.serialize(msg);
 
                     data.readerIndex(0);
 
@@ -194,6 +196,12 @@ public class PacketSerializer {
                     ctx.fireExceptionCaught(x);
                     ctx.fireUserEventTriggered("DISCONNECT");
                 }
+            }
+
+            @Override
+            public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
+                super.write(ctx, msg, promise);
+                data.release();
             }
         };
     }
