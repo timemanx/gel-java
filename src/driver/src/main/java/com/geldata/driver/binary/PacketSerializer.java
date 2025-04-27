@@ -178,13 +178,12 @@ public class PacketSerializer {
 
     public static @NotNull MessageToMessageEncoder<Sendable> createEncoder() {
         return new MessageToMessageEncoder<>() {
-            private ByteBuf data;
 
             @Override
             protected void encode(@NotNull ChannelHandlerContext ctx, @NotNull Sendable msg, @NotNull List<Object> out) {
 
                 try {
-                    data = PacketSerializer.serialize(msg);
+                    ByteBuf data = PacketSerializer.serialize(msg);
 
                     data.readerIndex(0);
 
@@ -196,12 +195,6 @@ public class PacketSerializer {
                     ctx.fireExceptionCaught(x);
                     ctx.fireUserEventTriggered("DISCONNECT");
                 }
-            }
-
-            @Override
-            public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
-                super.write(ctx, msg, promise);
-                data.release();
             }
         };
     }
