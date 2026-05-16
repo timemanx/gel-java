@@ -5,15 +5,12 @@ import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
-import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.ssl.ApplicationProtocolConfig;
 import io.netty.handler.ssl.ApplicationProtocolNegotiator;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
-import io.netty.util.concurrent.DefaultEventExecutorGroup;
-import io.netty.util.concurrent.EventExecutorGroup;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,20 +39,20 @@ import javax.net.ssl.SSLSessionContext;
 
 public class GelTcpClient extends GelBinaryClient implements TransactableClient {
     private static final Logger logger = LoggerFactory.getLogger(GelTcpClient.class);
-    private static final NioEventLoopGroup NETTY_TCP_GROUP = new NioEventLoopGroup();
-    private static final EventExecutorGroup DUPLEXER_GROUP = new DefaultEventExecutorGroup(8);
 
     private final @NotNull ChannelDuplexer duplexer;
     private final Bootstrap bootstrap;
+    private final SharedNettyEventLoopGroups.SharedHandle sharedEventLoopGroups;
     private TransactionState transactionState;
 
     public GelTcpClient(GelConnection connection, GelClientConfig config, AutoCloseable poolHandle) {
         super(connection, config, poolHandle);
         this.duplexer = new ChannelDuplexer(this);
+        this.sharedEventLoopGroups = SharedNettyEventLoopGroups.acquire();
 
         this.bootstrap = new Bootstrap()
                 .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
-                .group(NETTY_TCP_GROUP)
+                .group(this.sharedEventLoopGroups.nettyTcpGroup)
                 .channel(NioSocketChannel.class)
                 .handler(new ChannelInitializer<SocketChannel>() {
                     @Override
@@ -141,7 +138,7 @@ public class GelTcpClient extends GelBinaryClient implements TransactableClient 
                                 PacketSerializer.createEncoder()
                         );
 
-                        pipeline.addLast(DUPLEXER_GROUP, duplexer.channelHandler);
+                        pipeline.addLast(sharedEventLoopGroups.duplexerGroup, duplexer.channelHandler);
 
                         duplexer.init(ch);
                     }
@@ -193,6 +190,11 @@ public class GelTcpClient extends GelBinaryClient implements TransactableClient 
     @Override
     protected CompletionStage<Void> closeConnection() {
         return this.duplexer.disconnect();
+    }
+
+    @Override
+    protected CompletionStage<Void> onDispose() {
+        return SharedNettyEventLoopGroups.release(this.sharedEventLoopGroups);
     }
 
     @Override

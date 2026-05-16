@@ -1,6 +1,7 @@
 package com.geldata.driver.async;
 
 import io.netty.channel.ChannelFuture;
+import io.netty.util.concurrent.Future;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,6 +12,10 @@ public class ChannelCompletableFuture extends CompletableFuture<Void> {
     private static final Logger logger = LoggerFactory.getLogger(ChannelCompletableFuture.class);
 
     public static @NotNull ChannelCompletableFuture completeFrom(@NotNull ChannelFuture future) {
+        return completeFrom((Future<?>) future);
+    }
+
+    public static @NotNull ChannelCompletableFuture completeFrom(@NotNull Future<?> future) {
         var completableFuture = new ChannelCompletableFuture();
         logger.debug("Registering {}", future.hashCode());
 

@@ -21,12 +21,16 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.EnumSet;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -63,6 +67,8 @@ public final class GelClientPool implements StatefulClient, GelQueryable, AutoCl
     private final ClientFactory clientFactory;
     private final Session session;
     private final int clientAvailability;
+    private final Set<BaseGelClient> liveClients;
+    private final AtomicBoolean isClosed;
 
     /**
      * Constructs a new {@linkplain GelClientPool}.
@@ -74,13 +80,23 @@ public final class GelClientPool implements StatefulClient, GelQueryable, AutoCl
         @NotNull GelConnection connection,
         @NotNull GelClientConfig config
     ) throws ConfigurationException {
+        this(connection, config, null);
+    }
+
+    GelClientPool(
+        @NotNull GelConnection connection,
+        @NotNull GelClientConfig config,
+        @Nullable ClientFactory clientFactory
+    ) throws ConfigurationException {
         this.clients = new ConcurrentLinkedQueue<>();
         this.config = config;
         this.connection = connection;
         this.poolHolder = new ClientPoolHolder(config.getPoolSize());
-        this.clientFactory = createClientFactory();
+        this.clientFactory = clientFactory != null ? clientFactory : createClientFactory();
         this.session = Session.DEFAULT;
         this.clientAvailability = config.getClientAvailability();
+        this.liveClients = ConcurrentHashMap.newKeySet();
+        this.isClosed = new AtomicBoolean();
     }
 
     /**
@@ -119,6 +135,8 @@ public final class GelClientPool implements StatefulClient, GelQueryable, AutoCl
         this.clientFactory = other.clientFactory;
         this.session = session;
         this.clientAvailability = other.clientAvailability;
+        this.liveClients = ConcurrentHashMap.newKeySet();
+        this.isClosed = new AtomicBoolean();
     }
 
     public int getClientCount() {
@@ -333,10 +351,29 @@ public final class GelClientPool implements StatefulClient, GelQueryable, AutoCl
 
     @Override
     public void close() throws Exception {
-        int count = clientCount.get();
-        while(!clients.isEmpty() && count > 0) {
-            clients.poll().client.disconnect().toCompletableFuture().get();
-            count = clientCount.decrementAndGet();
+        if(!this.isClosed.compareAndSet(false, true)) {
+            return;
+        }
+
+        this.clients.clear();
+        this.clientCount.set(0);
+
+        var failures = new ArrayList<Throwable>();
+
+        for(var client : new ArrayList<>(this.liveClients)) {
+            try {
+                client.dispose().toCompletableFuture().get();
+            } catch (Exception e) {
+                failures.add(e);
+            } finally {
+                this.liveClients.remove(client);
+            }
+        }
+
+        if(!failures.isEmpty()) {
+            var failure = new Exception("Failed to close one or more pooled clients", failures.get(0));
+            failures.stream().skip(1).forEach(failure::addSuppressed);
+            throw failure;
         }
     }
 
@@ -377,13 +414,30 @@ public final class GelClientPool implements StatefulClient, GelQueryable, AutoCl
     }
 
     private void cleanupPool() {
-        clients.removeIf(c ->
-                c.age().compareTo(this.config.getClientMaxAge()) > 0
-                        || (!c.client.isConnected() && this.clientCount.decrementAndGet() >= this.clientAvailability)
-        );
+        if(this.clientCount.get() <= this.clientAvailability) {
+            return;
+        }
+
+        for(var client : new ArrayList<>(this.clients)) {
+            if(this.clientCount.get() <= this.clientAvailability) {
+                return;
+            }
+
+            if(client.age().compareTo(this.config.getClientMaxAge()) > 0 || !client.client.isConnected()) {
+                if(this.clients.remove(client)) {
+                    this.clientCount.decrementAndGet();
+                    disposeClient(client.client);
+                }
+            }
+        }
     }
 
     private synchronized void acceptClient(BaseGelClient client) {
+        if(this.isClosed.get()) {
+            disposeClient(client);
+            return;
+        }
+
         this.clients.add(new PooledClient(client));
         var count = this.clientCount.incrementAndGet();
 
@@ -415,14 +469,25 @@ public final class GelClientPool implements StatefulClient, GelQueryable, AutoCl
                     }
                     contract.register(client, this::acceptClient);
                     client.onReady(this::onClientReady);
+                    this.liveClients.add(client);
                     logger.debug("client instance created: {}", client);
                     return client;
                 })
                 .thenApply(client -> client.withSession(this.session));
     }
 
+    private void disposeClient(@NotNull BaseGelClient client) {
+        client.dispose().whenComplete((v, error) -> {
+            this.liveClients.remove(client);
+
+            if(error != null) {
+                logger.warn("Failed to dispose client {}", client, error);
+            }
+        });
+    }
+
     @FunctionalInterface
-    private interface ClientFactory {
+    interface ClientFactory {
         BaseGelClient create(GelConnection connection, GelClientConfig config, AutoCloseable poolHandle)
                 throws GelException;
     }
