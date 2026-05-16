@@ -12,8 +12,11 @@ import com.geldata.driver.state.Config;
 import com.geldata.driver.state.Session;
 
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.Optional;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -23,6 +26,7 @@ public abstract class BaseGelClient implements StatefulClient, GelQueryable, Aut
     private final GelConnection connection;
     private final GelClientConfig config;
     private final AutoCloseable poolHandle;
+    private final @NotNull AtomicBoolean isDisposed;
 
     protected Session session;
 
@@ -32,6 +36,7 @@ public abstract class BaseGelClient implements StatefulClient, GelQueryable, Aut
         this.session = new Session();
         this.poolHandle = poolHandle;
         this.onReady = new AsyncEvent<>();
+        this.isDisposed = new AtomicBoolean();
     }
 
     public void onReady(Function<BaseGelClient, CompletionStage<?>> handler) {
@@ -92,6 +97,33 @@ public abstract class BaseGelClient implements StatefulClient, GelQueryable, Aut
     public abstract CompletionStage<Void> connect();
     public abstract CompletionStage<Void> disconnect();
 
+    public final CompletionStage<Void> dispose() {
+        if(!this.isDisposed.compareAndSet(false, true)) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        return disconnect()
+                .handle((v, disconnectError) -> disconnectError)
+                .thenCompose(disconnectError ->
+                        onDispose()
+                                .handle((v, disposeError) -> {
+                                    if(disconnectError != null) {
+                                        if(disposeError != null) {
+                                            disconnectError.addSuppressed(disposeError);
+                                        }
+
+                                        throw wrapCompletionException(disconnectError);
+                                    }
+
+                                    if(disposeError != null) {
+                                        throw wrapCompletionException(disposeError);
+                                    }
+
+                                    return null;
+                                })
+                );
+    }
+
     public CompletionStage<Void> reconnect() {
         return disconnect().thenCompose((v) -> {
             logger.debug("Executing connection attempt from reconnect");
@@ -99,8 +131,18 @@ public abstract class BaseGelClient implements StatefulClient, GelQueryable, Aut
         });
     }
 
+    protected CompletionStage<Void> onDispose() {
+        return CompletableFuture.completedFuture(null);
+    }
+
     @Override
     public void close() throws Exception {
         this.poolHandle.close();
+    }
+
+    private static CompletionException wrapCompletionException(Throwable error) {
+        return error instanceof CompletionException
+                ? (CompletionException) error
+                : new CompletionException(error);
     }
 }
